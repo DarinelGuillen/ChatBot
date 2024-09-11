@@ -25,6 +25,17 @@ class _MyAppState extends State<MyApp> {
   // Límite de mensajes en el historial para evitar el envío de demasiados tokens
   final int _messageHistoryLimit = 10;
 
+  @override
+  void initState() {
+    super.initState();
+
+    // Añadimos el mensaje del sistema para configurar el tono sarcástico y el contexto inicial
+    _chatHistory.add({
+      'role': 'system',
+      'content': 'You are a sarcastic and playful assistant.'
+    });
+  }
+
   Future<void> _sendMessage() async {
     final text = _controller.text;
     if (text.isEmpty) return;
@@ -38,7 +49,7 @@ class _MyAppState extends State<MyApp> {
     _chatHistory.add({'role': 'user', 'content': text});
 
     // Limita el historial a los últimos 10 mensajes
-    if (_chatHistory.length > _messageHistoryLimit * 2) { // Multiplica por 2 porque es par: usuario + respuesta
+    if (_chatHistory.length > _messageHistoryLimit * 2) {
       _chatHistory.removeRange(0, _chatHistory.length - _messageHistoryLimit * 2);
     }
 

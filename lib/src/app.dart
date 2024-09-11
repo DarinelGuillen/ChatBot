@@ -1,85 +1,141 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-
-import 'sample_feature/sample_item_details_view.dart';
-import 'sample_feature/sample_item_list_view.dart';
+import 'chatbot/chat_message.dart';
+import 'chatbot/chat_input.dart';
 import 'settings/settings_controller.dart';
-import 'settings/settings_view.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// The Widget that configures your application.
-class MyApp extends StatelessWidget {
-  const MyApp({
-    super.key,
-    required this.settingsController,
-  });
+class MyApp extends StatefulWidget {
+  const MyApp({Key? key, required this.settingsController}) : super(key: key);
 
   final SettingsController settingsController;
 
   @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final TextEditingController _controller = TextEditingController();
+  final List<ChatMessage> _messages = [];
+
+  // Lista para almacenar el historial de mensajes que será enviado a la API
+  final List<Map<String, String>> _chatHistory = [];
+
+  // Límite de mensajes en el historial para evitar el envío de demasiados tokens
+  final int _messageHistoryLimit = 10;
+
+  Future<void> _sendMessage() async {
+    final text = _controller.text;
+    if (text.isEmpty) return;
+
+    // Agrega el mensaje del usuario a la interfaz de usuario
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+    });
+
+    // Agrega el mensaje del usuario al historial que será enviado a la API
+    _chatHistory.add({'role': 'user', 'content': text});
+
+    // Limita el historial a los últimos 10 mensajes
+    if (_chatHistory.length > _messageHistoryLimit * 2) { // Multiplica por 2 porque es par: usuario + respuesta
+      _chatHistory.removeRange(0, _chatHistory.length - _messageHistoryLimit * 2);
+    }
+
+    _controller.clear();
+
+    // Llama a la API para obtener la respuesta de ChatGPT
+    final response = await _getChatGPTResponse();
+
+    setState(() {
+      _messages.add(ChatMessage(text: response, isUser: false));
+    });
+
+    // Agrega la respuesta de ChatGPT al historial
+    _chatHistory.add({'role': 'assistant', 'content': response});
+  }
+
+  Future<String> _getChatGPTResponse() async {
+    final apiKey = dotenv.env['OPENAI_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      return 'Error: La clave de API no está configurada.';
+    }
+
+    final url = Uri.parse('https://api.openai.com/v1/chat/completions');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $apiKey',
+    };
+
+    final body = jsonEncode({
+      'model': 'gpt-3.5-turbo',
+      'messages': _chatHistory,  // Envía solo los últimos mensajes del historial
+    });
+
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['choices'][0]['message']['content'].trim();
+      } else {
+        return 'Error: ${response.statusCode} - ${response.reasonPhrase}';
+      }
+    } catch (e) {
+      return 'Error al conectar con la API de OpenAI: $e';
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Glue the SettingsController to the MaterialApp.
-    //
-    // The ListenableBuilder Widget listens to the SettingsController for changes.
-    // Whenever the user updates their settings, the MaterialApp is rebuilt.
-    return ListenableBuilder(
-      listenable: settingsController,
-      builder: (BuildContext context, Widget? child) {
-        return MaterialApp(
-          // Providing a restorationScopeId allows the Navigator built by the
-          // MaterialApp to restore the navigation stack when a user leaves and
-          // returns to the app after it has been killed while running in the
-          // background.
-          restorationScopeId: 'app',
+    return MaterialApp(
+      title: 'Chatbot con ChatGPT',
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      themeMode: widget.settingsController.themeMode,
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Chatbot con ChatGPT'),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final message = _messages[index];
+                  final messageBackground = message.isUser
+                      ? Theme.of(context).brightness == Brightness.dark
+                          ? Colors.blue[300]
+                          : Colors.blue[100]
+                      : Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[700]
+                          : Colors.grey[300];
 
-          // Provide the generated AppLocalizations to the MaterialApp. This
-          // allows descendant Widgets to display the correct translations
-          // depending on the user's locale.
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
+                  return ListTile(
+                    title: Align(
+                      alignment: message.isUser
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.all(8.0),
+                        decoration: BoxDecoration(
+                          color: messageBackground,
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: Text(message.text),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            ChatInput(
+              controller: _controller,
+              onSend: _sendMessage,
+            ),
           ],
-          supportedLocales: const [
-            Locale('en', ''), // English, no country code
-          ],
-
-          // Use AppLocalizations to configure the correct application title
-          // depending on the user's locale.
-          //
-          // The appTitle is defined in .arb files found in the localization
-          // directory.
-          onGenerateTitle: (BuildContext context) =>
-              AppLocalizations.of(context)!.appTitle,
-
-          // Define a light and dark color theme. Then, read the user's
-          // preferred ThemeMode (light, dark, or system default) from the
-          // SettingsController to display the correct theme.
-          theme: ThemeData(),
-          darkTheme: ThemeData.dark(),
-          themeMode: settingsController.themeMode,
-
-          // Define a function to handle named routes in order to support
-          // Flutter web url navigation and deep linking.
-          onGenerateRoute: (RouteSettings routeSettings) {
-            return MaterialPageRoute<void>(
-              settings: routeSettings,
-              builder: (BuildContext context) {
-                switch (routeSettings.name) {
-                  case SettingsView.routeName:
-                    return SettingsView(controller: settingsController);
-                  case SampleItemDetailsView.routeName:
-                    return const SampleItemDetailsView();
-                  case SampleItemListView.routeName:
-                  default:
-                    return const SampleItemListView();
-                }
-              },
-            );
-          },
-        );
-      },
+        ),
+      ),
     );
   }
 }

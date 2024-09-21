@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart'; // Para animaciones
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key, required this.settingsController});
@@ -30,14 +31,20 @@ class _MyAppState extends State<MyApp> {
   // Instancia de FlutterTts
   final FlutterTts _flutterTts = FlutterTts();
 
+  // Lista de voces disponibles
+  List<dynamic> _voices = [];
+
+  // Estado para indicar si el modo de voz está activo
+  bool _voiceModeActive = false;
+
   @override
   void initState() {
     super.initState();
 
-    // Añadimos el mensaje del sistema para configurar el tono sarcástico y el contexto inicial
+    // Actualizar el mensaje del sistema para que actúe como un profesor de inglés amigable
     _chatHistory.add({
       'role': 'system',
-      'content': 'You are a sarcastic and playful assistant.'
+      'content': 'You are a friendly English teacher who helps users learn English. Always respond in English and encourage the user to practice.'
     });
 
     // Configurar FlutterTts
@@ -45,12 +52,47 @@ class _MyAppState extends State<MyApp> {
 
     // Solicitar permisos
     _requestPermissions();
+
+    // Agregar listeners para FlutterTts
+    _flutterTts.setStartHandler(() {
+      setState(() {
+        _voiceModeActive = true;
+      });
+    });
+
+    _flutterTts.setCompletionHandler(() {
+      setState(() {
+        _voiceModeActive = false;
+      });
+    });
+
+    _flutterTts.setErrorHandler((msg) {
+      setState(() {
+        _voiceModeActive = false;
+      });
+    });
   }
 
   Future<void> _initializeTts() async {
-    await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.setSpeechRate(0.5);
+    // Obtener todas las voces disponibles
+    _voices = await _flutterTts.getVoices;
+
+    // Seleccionar una voz específica (por ejemplo, una voz femenina en inglés)
+    // Puedes imprimir las voces disponibles para elegir una
+    // print(_voices);
+
+    // Aquí seleccionamos la primera voz en inglés disponible
+    var selectedVoice = _voices.firstWhere(
+        (voice) => voice['locale'].toString().contains('en'),
+        orElse: () => null);
+
+    if (selectedVoice != null) {
+      await _flutterTts.setVoice({"name": selectedVoice['name'], "locale": selectedVoice['locale']});
+    }
+
+    await _flutterTts.setLanguage("en-US"); // Aseguramos que la síntesis de voz sea en inglés
+    await _flutterTts.setPitch(1.2); // Ajusta el tono según prefieras
+    await _flutterTts.setSpeechRate(0.5); // Ajusta la velocidad según prefieras
   }
 
   Future<void> _requestPermissions() async {
@@ -97,7 +139,7 @@ class _MyAppState extends State<MyApp> {
   Future<String> _getChatGPTResponse() async {
     final apiKey = dotenv.env['OPENAI_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
-      return 'Error: La clave de API no está configurada.';
+      return 'Error: The API key is not configured.';
     }
 
     final url = Uri.parse('https://api.openai.com/v1/chat/completions');
@@ -120,11 +162,14 @@ class _MyAppState extends State<MyApp> {
         return 'Error: ${response.statusCode} - ${response.reasonPhrase}';
       }
     } catch (e) {
-      return 'Error al conectar con la API de OpenAI: $e';
+      return 'Error connecting to OpenAI API: $e';
     }
   }
 
   Future<void> _speak(String text) async {
+    setState(() {
+      _voiceModeActive = true;
+    });
     await _flutterTts.speak(text);
   }
 
@@ -150,44 +195,72 @@ class _MyAppState extends State<MyApp> {
         appBar: AppBar(
           title: const Text('Chatbot con ChatGPT'),
         ),
-        body: Column(
+        body: Stack(
           children: [
-            Expanded(
-              child: ListView.builder(
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message = _messages[index];
-                  final messageBackground = message.isUser
-                      ? Theme.of(context).brightness == Brightness.dark
-                          ? Colors.blue[300]
-                          : Colors.blue[100]
-                      : Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[700]
-                          : Colors.grey[300];
+            Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      final messageBackground = message.isUser
+                          ? Theme.of(context).brightness == Brightness.dark
+                              ? Colors.blue[300]
+                              : Colors.blue[100]
+                          : Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey[700]
+                              : Colors.grey[300];
 
-                  return ListTile(
-                    title: Align(
-                      alignment: message.isUser
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: messageBackground,
-                          borderRadius: BorderRadius.circular(8.0),
+                      return ListTile(
+                        title: Align(
+                          alignment: message.isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.all(8.0),
+                            decoration: BoxDecoration(
+                              color: messageBackground,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Text(message.text),
+                          ),
                         ),
-                        child: Text(message.text),
+                      );
+                    },
+                  ),
+                ),
+                ChatInput(
+                  controller: _controller,
+                  onSend: () => _sendMessage(),
+                  onVoiceInput: _handleVoiceInput,
+                ),
+              ],
+            ),
+            // Superposición para indicar modo de voz activo
+            if (_voiceModeActive)
+              Container(
+                color: Colors.black54,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SpinKitWave(
+                        color: Colors.white,
+                        size: 50.0,
                       ),
-                    ),
-                  );
-                },
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Voice Mode Active',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            ChatInput(
-              controller: _controller,
-              onSend: () => _sendMessage(),
-              onVoiceInput: _handleVoiceInput,
-            ),
           ],
         ),
       ),

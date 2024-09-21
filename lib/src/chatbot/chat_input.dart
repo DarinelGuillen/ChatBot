@@ -42,7 +42,7 @@ class _ChatInputState extends State<ChatInput> {
       if (available) {
         setState(() => _isListening = true);
         _speech.listen(
-          localeId: 'en_US',
+          localeId: 'en_US', // Aseguramos que el reconocimiento de voz sea en inglés
           onResult: (result) {
             if (result.finalResult) {
               widget.onVoiceInput(result.recognizedWords);
@@ -84,13 +84,18 @@ class _ChatInputState extends State<ChatInput> {
                   borderRadius: BorderRadius.circular(30.0),
                   borderSide: BorderSide.none,
                 ),
-                hintText: 'Type a message...',
+                hintText: 'Type a message...', // Texto en inglés
                 hintStyle: TextStyle(
                   color: Theme.of(context).brightness == Brightness.dark
                       ? Colors.grey[400]
                       : Colors.grey[600],
                 ),
               ),
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (value) {
+                widget.onSend();
+              },
             ),
           ),
           const SizedBox(width: 8),

@@ -5,6 +5,8 @@ import 'settings/settings_controller.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key, required this.settingsController});
@@ -25,6 +27,9 @@ class _MyAppState extends State<MyApp> {
   // Límite de mensajes en el historial para evitar el envío de demasiados tokens
   final int _messageHistoryLimit = 10;
 
+  // Instancia de FlutterTts
+  final FlutterTts _flutterTts = FlutterTts();
+
   @override
   void initState() {
     super.initState();
@@ -34,10 +39,27 @@ class _MyAppState extends State<MyApp> {
       'role': 'system',
       'content': 'You are a sarcastic and playful assistant.'
     });
+
+    // Configurar FlutterTts
+    _initializeTts();
+
+    // Solicitar permisos
+    _requestPermissions();
   }
 
-  Future<void> _sendMessage() async {
-    final text = _controller.text;
+  Future<void> _initializeTts() async {
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setPitch(1.0);
+    await _flutterTts.setSpeechRate(0.5);
+  }
+
+  Future<void> _requestPermissions() async {
+    await Permission.microphone.request();
+    await Permission.speech.request();
+  }
+
+  Future<void> _sendMessage({String? voiceText}) async {
+    final text = voiceText ?? _controller.text;
     if (text.isEmpty) return;
 
     // Agrega el mensaje del usuario a la interfaz de usuario
@@ -50,10 +72,13 @@ class _MyAppState extends State<MyApp> {
 
     // Limita el historial a los últimos 10 mensajes
     if (_chatHistory.length > _messageHistoryLimit * 2) {
-      _chatHistory.removeRange(0, _chatHistory.length - _messageHistoryLimit * 2);
+      _chatHistory.removeRange(
+          0, _chatHistory.length - _messageHistoryLimit * 2);
     }
 
-    _controller.clear();
+    if (voiceText == null) {
+      _controller.clear();
+    }
 
     // Llama a la API para obtener la respuesta de ChatGPT
     final response = await _getChatGPTResponse();
@@ -64,6 +89,9 @@ class _MyAppState extends State<MyApp> {
 
     // Agrega la respuesta de ChatGPT al historial
     _chatHistory.add({'role': 'assistant', 'content': response});
+
+    // Reproducir la respuesta de ChatGPT
+    _speak(response);
   }
 
   Future<String> _getChatGPTResponse() async {
@@ -80,7 +108,7 @@ class _MyAppState extends State<MyApp> {
 
     final body = jsonEncode({
       'model': 'gpt-3.5-turbo',
-      'messages': _chatHistory,  // Envía solo los últimos mensajes del historial
+      'messages': _chatHistory, // Envía solo los últimos mensajes del historial
     });
 
     try {
@@ -94,6 +122,21 @@ class _MyAppState extends State<MyApp> {
     } catch (e) {
       return 'Error al conectar con la API de OpenAI: $e';
     }
+  }
+
+  Future<void> _speak(String text) async {
+    await _flutterTts.speak(text);
+  }
+
+  void _handleVoiceInput(String voiceText) {
+    _sendMessage(voiceText: voiceText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _flutterTts.stop();
+    super.dispose();
   }
 
   @override
@@ -142,7 +185,8 @@ class _MyAppState extends State<MyApp> {
             ),
             ChatInput(
               controller: _controller,
-              onSend: _sendMessage,
+              onSend: () => _sendMessage(),
+              onVoiceInput: _handleVoiceInput,
             ),
           ],
         ),

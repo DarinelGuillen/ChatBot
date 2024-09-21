@@ -12,10 +12,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_dotenv: ^5.1.0
-  flutter_localizations:
-    sdk: flutter
-  http: ^1.2.2
+  http: ^0.13.5
+  flutter_dotenv: ^5.0.2
+  speech_to_text: ^7.0.0
+  flutter_tts: ^3.5.2
+  permission_handler: ^10.2.0
 
 dev_dependencies:
   flutter_test:

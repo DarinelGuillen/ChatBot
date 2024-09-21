@@ -7,7 +7,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class MyApp extends StatefulWidget {
-  const MyApp({Key? key, required this.settingsController}) : super(key: key);
+  const MyApp({super.key, required this.settingsController});
 
   final SettingsController settingsController;
 

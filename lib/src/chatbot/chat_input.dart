@@ -4,8 +4,7 @@ class ChatInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
 
-  const ChatInput({required this.controller, required this.onSend, Key? key})
-      : super(key: key);
+  const ChatInput({required this.controller, required this.onSend, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +44,7 @@ class ChatInput extends StatelessWidget {
             onTap: onSend,
             child: Container(
               padding: const EdgeInsets.all(10.0),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.blueAccent,
                 shape: BoxShape.circle,
               ),

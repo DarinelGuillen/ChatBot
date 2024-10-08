@@ -37,6 +37,9 @@ class _MyAppState extends State<MyApp> {
   // Estado para indicar si el modo de voz está activo
   bool _voiceModeActive = false;
 
+  // Voz seleccionada
+  String? _selectedVoice;
+
   @override
   void initState() {
     super.initState();
@@ -77,17 +80,20 @@ class _MyAppState extends State<MyApp> {
     // Obtener todas las voces disponibles
     _voices = await _flutterTts.getVoices;
 
-    // Seleccionar una voz específica (por ejemplo, una voz femenina en inglés)
-    // Puedes imprimir las voces disponibles para elegir una
-    // print(_voices);
+    // Imprimir las voces disponibles en la consola para verificar
+    print("Voces disponibles:");
+    for (var voice in _voices) {
+      print("Name: ${voice['name']}, Locale: ${voice['locale']}");
+    }
 
-    // Aquí seleccionamos la primera voz en inglés disponible
+    // Opcional: Seleccionar una voz específica por defecto
     var selectedVoice = _voices.firstWhere(
         (voice) => voice['locale'].toString().contains('en'),
         orElse: () => null);
 
     if (selectedVoice != null) {
       await _flutterTts.setVoice({"name": selectedVoice['name'], "locale": selectedVoice['locale']});
+      _selectedVoice = selectedVoice['name'];
     }
 
     await _flutterTts.setLanguage("en-US"); // Aseguramos que la síntesis de voz sea en inglés
@@ -167,6 +173,15 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _speak(String text) async {
+    if (_selectedVoice != null) {
+      var voice = _voices.firstWhere(
+          (voice) => voice['name'] == _selectedVoice,
+          orElse: () => null);
+      if (voice != null) {
+        await _flutterTts.setVoice({"name": voice['name'], "locale": voice['locale']});
+      }
+    }
+
     setState(() {
       _voiceModeActive = true;
     });
@@ -175,6 +190,44 @@ class _MyAppState extends State<MyApp> {
 
   void _handleVoiceInput(String voiceText) {
     _sendMessage(voiceText: voiceText);
+  }
+
+  // Función para mostrar un diálogo con las voces disponibles
+  void _showVoiceSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Voice'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _voices.length,
+              itemBuilder: (context, index) {
+                var voice = _voices[index];
+                return ListTile(
+                  title: Text("${voice['name']} (${voice['locale']})"),
+                  onTap: () async {
+                    await _flutterTts.setVoice({"name": voice['name'], "locale": voice['locale']});
+                    setState(() {
+                      _selectedVoice = voice['name'];
+                    });
+                    Navigator.of(context).pop();
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -194,6 +247,13 @@ class _MyAppState extends State<MyApp> {
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Chatbot con ChatGPT'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.voice_over_off),
+              onPressed: _showVoiceSelectionDialog,
+              tooltip: 'Select Voice',
+            ),
+          ],
         ),
         body: Stack(
           children: [
@@ -255,6 +315,15 @@ class _MyAppState extends State<MyApp> {
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Listening...',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
                         ),
                       ),
                     ],

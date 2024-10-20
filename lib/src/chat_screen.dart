@@ -42,6 +42,9 @@ class _ChatScreenState extends State<ChatScreen> {
   // Estado para indicar si el modo de voz está activo
   bool _voiceModeActive = false;
 
+  // Estado para indicar si se está obteniendo una respuesta
+  bool _isFetchingResponse = false;
+
   // Voz seleccionada
   String? _selectedVoice;
 
@@ -114,7 +117,6 @@ class _ChatScreenState extends State<ChatScreen> {
     await _flutterTts.awaitSpeakCompletion(true); // Espera a que termine de hablar
   }
 
-
   Future<void> _requestPermissions() async {
     await Permission.microphone.request();
     await Permission.speech.request();
@@ -124,15 +126,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = voiceText ?? _controller.text;
     if (text.isEmpty) return;
 
-    // Agrega el mensaje del usuario a la interfaz de usuario
+    // Indicar que se está procesando la solicitud
     setState(() {
+      _isFetchingResponse = true;
       _messages.add(ChatMessage(text: text, isUser: true));
+      _chatHistory.add({'role': 'user', 'content': text});
     });
 
-    // Agrega el mensaje del usuario al historial que será enviado a la API
-    _chatHistory.add({'role': 'user', 'content': text});
-
-    // Limita el historial a los últimos mensajes
+    // Limitar el historial a los últimos mensajes
     if (_chatHistory.length > _messageHistoryLimit * 2) {
       _chatHistory.removeRange(
           0, _chatHistory.length - _messageHistoryLimit * 2);
@@ -147,16 +148,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       _messages.add(ChatMessage(text: response, isUser: false));
+      _chatHistory.add({'role': 'assistant', 'content': response});
+      _isFetchingResponse = false; // Finalizar el estado de carga
     });
-
-    // Agrega la respuesta de ChatGPT al historial
-    _chatHistory.add({'role': 'assistant', 'content': response});
 
     // Guarda la conversación actualizada en Hive
     _saveCurrentConversation();
 
-    // Reproducir la respuesta de ChatGPT
-    await _speak(response);
+    // Condicionalmente reproducir la respuesta si fue enviada por voz
+    if (voiceText != null) {
+      await _speak(response);
+    }
   }
 
   Future<String> _getChatGPTResponse() async {
@@ -196,8 +198,10 @@ class _ChatScreenState extends State<ChatScreen> {
           (voice) => voice['name'] == _selectedVoice,
           orElse: () => null);
       if (voice != null) {
-        await _flutterTts
-            .setVoice({"name": voice['name'], "locale": voice['locale']});
+        await _flutterTts.setVoice({
+          "name": voice['name'],
+          "locale": voice['locale']
+        });
       }
     }
 
@@ -213,8 +217,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     await _flutterTts.speak(text);
-}
-
+  }
 
   void _handleVoiceInput(String voiceText) {
     _sendMessage(voiceText: voiceText);
@@ -237,8 +240,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 return ListTile(
                   title: Text("${voice['name']} (${voice['locale']})"),
                   onTap: () async {
-                    await _flutterTts.setVoice(
-                        {"name": voice['name'], "locale": voice['locale']});
+                    await _flutterTts.setVoice({
+                      "name": voice['name'],
+                      "locale": voice['locale']
+                    });
                     setState(() {
                       _selectedVoice = voice['name'];
                     });
@@ -408,6 +413,31 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ],
           ),
+          // Superposición para indicar que se está esperando una respuesta
+          if (_isFetchingResponse)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SpinKitCircle(
+                      color: Colors.white,
+                      size: 50.0,
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Obteniendo respuesta...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           // Superposición para indicar modo de voz activo
           if (_voiceModeActive)
             Container(

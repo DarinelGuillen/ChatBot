@@ -12,8 +12,8 @@ class HomeScreen extends StatelessWidget {
   final String degree = 'IDS';
   final String subject = 'Programación para móviles';
   final String group = '9B';
-  final String studentName = 'NOMBRE COMPLETO';
-  final String studentId = '191034';
+  final String studentName = 'CHRISTIAN DARINEL ESCOBAR GUILLEN';
+  final String studentId = '221192';
   final String repositoryLink = 'https://github.com/DarinelGuillen/ChatBot';
 
   @override
@@ -50,23 +50,25 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-  onPressed: () async {
-    try {
-      await launchUrlString(
-        repositoryLink,
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (e) {
-      print('Error al abrir el enlace: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo abrir el enlace al repositorio: $e')),
-      );
-    }
-  },
-  icon: const Icon(Icons.link),
-  label: const Text('Ver repositorio'),
-),
-
+              onPressed: () async {
+                try {
+                  final Uri url = Uri.parse(repositoryLink);
+                  if (!await launchUrl(
+                    url,
+                    mode: LaunchMode.externalApplication,
+                  )) {
+                    throw 'No se pudo abrir la URL: $url';
+                  }
+                } catch (e) {
+                  print('Error al abrir el enlace: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('No se pudo abrir el enlace al repositorio: $e')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.link),
+              label: const Text('Ver repositorio'),
+            ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {

@@ -1,16 +1,12 @@
+// lib/src/chat_screen.dart
 import 'package:flutter/material.dart';
-import 'chatbot/chat_message.dart';
 import 'chatbot/chat_input.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:hive/hive.dart';
-import 'models/conversation.dart';
-import 'package:uuid/uuid.dart';
 
 class ChatScreen extends StatefulWidget {
   static const routeName = '/chat';
@@ -25,13 +21,13 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
 
   // Lista de mensajes actuales
-  List<ChatMessage> _messages = [];
+  List<Map<String, dynamic>> _messages = [];
 
   // Lista para almacenar el historial de mensajes que será enviado a la API
   List<Map<String, String>> _chatHistory = [];
 
   // Límite de mensajes en el historial para evitar el envío de demasiados tokens
-  final int _messageHistoryLimit = 10;
+  final int _messageHistoryLimit = 1;
 
   // Instancia de FlutterTts
   final FlutterTts _flutterTts = FlutterTts();
@@ -47,15 +43,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Voz seleccionada
   String? _selectedVoice;
-
-  // Caja de Hive para conversaciones
-  late Box _conversationBox;
-
-  // Identificador único para la conversación actual
-  late String _currentConversationId;
-
-  // Título de la conversación actual
-  String _currentConversationTitle = '+ Nueva Conversación';
 
   @override
   void initState() {
@@ -85,12 +72,6 @@ class _ChatScreenState extends State<ChatScreen> {
         _voiceModeActive = false;
       });
     });
-
-    // Inicializar Hive
-    _conversationBox = Hive.box('chat_histories');
-
-    // Iniciar nueva conversación
-    _startNewConversation();
   }
 
   Future<void> _initializeTts() async {
@@ -129,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Indicar que se está procesando la solicitud
     setState(() {
       _isFetchingResponse = true;
-      _messages.add(ChatMessage(text: text, isUser: true));
+      _messages.add({'text': text, 'isUser': true});
       _chatHistory.add({'role': 'user', 'content': text});
     });
 
@@ -147,13 +128,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await _getChatGPTResponse();
 
     setState(() {
-      _messages.add(ChatMessage(text: response, isUser: false));
+      _messages.add({'text': response, 'isUser': false});
       _chatHistory.add({'role': 'assistant', 'content': response});
       _isFetchingResponse = false; // Finalizar el estado de carga
     });
-
-    // Guarda la conversación actualizada en Hive
-    _saveCurrentConversation();
 
     // Condicionalmente reproducir la respuesta si fue enviada por voz
     if (voiceText != null) {
@@ -264,90 +242,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // Iniciar una nueva conversación
-  void _startNewConversation() {
-    setState(() {
-      _currentConversationId = const Uuid().v4();
-      _currentConversationTitle = 'Conversación ${_conversationBox.length + 1}';
-      _messages = [];
-      _chatHistory = [];
-
-      // Mensaje del sistema para contexto
-      _chatHistory.add({
-        'role': 'system',
-        'content':
-            'You are a friendly English teacher who helps users learn English. Always respond in English and encourage the user to practice.'
-      });
-    });
-  }
-
-  // Guardar la conversación actual en Hive
-  void _saveCurrentConversation() {
-    final conversation = Conversation(
-      id: _currentConversationId,
-      title: _currentConversationTitle,
-      messages: _messages,
-    );
-    _conversationBox.put(_currentConversationId, conversation);
-  }
-
-  // Cargar una conversación desde Hive
-  void _loadConversation(String conversationId) {
-    final conversation = _conversationBox.get(conversationId) as Conversation;
-    setState(() {
-      _currentConversationId = conversation.id;
-      _currentConversationTitle = conversation.title;
-      _messages = conversation.messages;
-      _chatHistory = [];
-
-      // Reconstruir el chatHistory para el contexto de la API
-      _chatHistory.add({
-        'role': 'system',
-        'content':
-            'You are a friendly English teacher who helps users learn English. Always respond in English and encourage the user to practice.'
-      });
-
-      for (var message in conversation.messages) {
-        _chatHistory.add({
-          'role': message.isUser ? 'user' : 'assistant',
-          'content': message.text,
-        });
-      }
-    });
-  }
-
-  // Mostrar el menú lateral con las conversaciones guardadas
-  Widget _buildDrawer() {
-    return Drawer(
-      child: ListView(
-        children: [
-          const DrawerHeader(
-            child: Text('Historial de Conversaciones'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.add),
-            title: const Text('Nueva Conversación'),
-            onTap: () {
-              Navigator.pop(context);
-              _startNewConversation();
-            },
-          ),
-          ..._conversationBox.values.map((conversation) {
-            final conv = conversation as Conversation;
-            return ListTile(
-              leading: const Icon(Icons.chat),
-              title: Text(conv.title),
-              onTap: () {
-                Navigator.pop(context);
-                _loadConversation(conv.id);
-              },
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -359,7 +253,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_currentConversationTitle),
+        title: Text('Chat'),
         actions: [
           IconButton(
             icon: const Icon(Icons.voice_over_off),
@@ -368,7 +262,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      drawer: _buildDrawer(),
       body: Stack(
         children: [
           Column(
@@ -379,7 +272,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
                     final message = _messages[index];
-                    final messageBackground = message.isUser
+                    final messageBackground = message['isUser']
                         ? Theme.of(context).brightness == Brightness.dark
                             ? Colors.blue[300]
                             : Colors.blue[100]
@@ -389,7 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     return ListTile(
                       title: Align(
-                        alignment: message.isUser
+                        alignment: message['isUser']
                             ? Alignment.centerRight
                             : Alignment.centerLeft,
                         child: Container(
@@ -398,7 +291,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             color: messageBackground,
                             borderRadius: BorderRadius.circular(8.0),
                           ),
-                          child: Text(message.text),
+                          child: Text(message['text']),
                         ),
                       ),
                     );
